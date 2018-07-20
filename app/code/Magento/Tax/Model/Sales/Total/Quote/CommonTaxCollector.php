@@ -188,6 +188,7 @@ class CommonTaxCollector extends AbstractTotal
      * @param bool $priceIncludesTax
      * @param bool $useBaseCurrency
      * @param string $parentCode
+     * @param bool $useOriginalPrice
      * @return \Magento\Tax\Api\Data\QuoteDetailsItemInterface
      */
     public function mapItem(
@@ -195,12 +196,14 @@ class CommonTaxCollector extends AbstractTotal
         AbstractItem $item,
         $priceIncludesTax,
         $useBaseCurrency,
-        $parentCode = null
+        $parentCode = null,
+        $useOriginalPrice = false
     ) {
         if (!$item->getTaxCalculationItemId()) {
             $sequence = 'sequence-' . $this->getNextIncrement();
             $item->setTaxCalculationItemId($sequence);
         }
+
         /** @var \Magento\Tax\Api\Data\QuoteDetailsItemInterface $itemDataObject */
         $itemDataObject = $itemDataObjectFactory->create();
         $itemDataObject->setCode($item->getTaxCalculationItemId())
@@ -215,13 +218,13 @@ class CommonTaxCollector extends AbstractTotal
 
         if ($useBaseCurrency) {
             if (!$item->getBaseTaxCalculationPrice()) {
-                $item->setBaseTaxCalculationPrice($item->getBaseCalculationPriceOriginal());
+                $item->setBaseTaxCalculationPrice($this->getBaseTaxCalculationPrice($item, $useOriginalPrice));
             }
             $itemDataObject->setUnitPrice($item->getBaseTaxCalculationPrice())
                 ->setDiscountAmount($item->getBaseDiscountAmount());
         } else {
             if (!$item->getTaxCalculationPrice()) {
-                $item->setTaxCalculationPrice($item->getCalculationPriceOriginal());
+                $item->setTaxCalculationPrice($this->getTaxCalculationPrice($item, $useOriginalPrice));
             }
             $itemDataObject->setUnitPrice($item->getTaxCalculationPrice())
                 ->setDiscountAmount($item->getDiscountAmount());
@@ -285,14 +288,16 @@ class CommonTaxCollector extends AbstractTotal
      * Add quote items
      *
      * @param ShippingAssignmentInterface $shippingAssignment
-     * @param bool $useBaseCurrency
      * @param bool $priceIncludesTax
+     * @param bool $useBaseCurrency
+     * @param bool $useOriginalPrice
      * @return \Magento\Tax\Api\Data\QuoteDetailsItemInterface[]
      */
     public function mapItems(
         ShippingAssignmentInterface $shippingAssignment,
         $priceIncludesTax,
-        $useBaseCurrency
+        $useBaseCurrency,
+        $useOriginalPrice = null
     ) {
         $items = $shippingAssignment->getItems();
         if (!count($items)) {
@@ -308,7 +313,13 @@ class CommonTaxCollector extends AbstractTotal
             }
 
             if ($item->getHasChildren() && $item->isChildrenCalculated()) {
-                $parentItemDataObject = $this->mapItem($itemDataObjectFactory, $item, $priceIncludesTax, $useBaseCurrency);
+                $parentItemDataObject = $this->mapItem(
+                    $itemDataObjectFactory,
+                    $item,
+                    $priceIncludesTax,
+                    $useBaseCurrency,
+                    $useOriginalPrice
+                );
                 $itemDataObjects[] = $parentItemDataObject;
                 foreach ($item->getChildren() as $child) {
                     $childItemDataObject = $this->mapItem(
@@ -316,7 +327,8 @@ class CommonTaxCollector extends AbstractTotal
                         $child,
                         $priceIncludesTax,
                         $useBaseCurrency,
-                        $parentItemDataObject->getCode()
+                        $parentItemDataObject->getCode(),
+                        $useOriginalPrice
                     );
                     $itemDataObjects[] = $childItemDataObject;
                     $extraTaxableItems = $this->mapItemExtraTaxables(
@@ -328,7 +340,14 @@ class CommonTaxCollector extends AbstractTotal
                     $itemDataObjects = array_merge($itemDataObjects, $extraTaxableItems);
                 }
             } else {
-                $itemDataObject = $this->mapItem($itemDataObjectFactory, $item, $priceIncludesTax, $useBaseCurrency);
+                $itemDataObject = $this->mapItem(
+                    $itemDataObjectFactory,
+                    $item,
+                    $priceIncludesTax,
+                    $useBaseCurrency,
+                    null,
+                    $useOriginalPrice
+                );
                 $itemDataObjects[] = $itemDataObject;
                 $extraTaxableItems = $this->mapItemExtraTaxables(
                     $itemDataObjectFactory,
@@ -405,6 +424,30 @@ class CommonTaxCollector extends AbstractTotal
         }
 
         return null;
+    }
+
+    /**
+     * Determine the base tax calculation price according to tax configuration.
+     *
+     * @param AbstractItem $item
+     * @param bool $useOriginalPrice
+     * @return float
+     */
+    protected function getBaseTaxCalculationPrice(AbstractItem $item, $useOriginalPrice = false)
+    {
+        return $useOriginalPrice ? $item->getBaseOriginalPrice() : $item->getBaseCalculationPriceOriginal();
+    }
+
+    /**
+     * Determine the tax calculation price according to tax configuration.
+     *
+     * @param AbstractItem $item
+     * @param bool $useOriginalPrice
+     * @return float
+     */
+    protected function getTaxCalculationPrice(AbstractItem $item, $useOriginalPrice = false)
+    {
+        return $useOriginalPrice ? $item->getOriginalPrice() : $item->getCalculationPriceOriginal();
     }
 
     /**
@@ -531,7 +574,7 @@ class CommonTaxCollector extends AbstractTotal
         $total->setSubtotalInclTax($subtotalInclTax);
         $total->setBaseSubtotalTotalInclTax($baseSubtotalInclTax);
         $total->setBaseSubtotalInclTax($baseSubtotalInclTax);
-        $shippingAssignment->getShipping()->getAddress()->setBaseSubtotalTotalInclTax($baseSubtotalInclTax);
+        $shippingAssignment->getShipping()->getAddress()->setBaseSubtotalTotalInclTax($baseSubtotalInclTax);;
 
         return $this;
     }

@@ -9,11 +9,53 @@
  */
 namespace Magento\Tax\Model\Sales\Total\Quote;
 
+use Magento\Customer\Api\Data\AddressInterfaceFactory as CustomerAddressFactory;
+use Magento\Customer\Api\Data\RegionInterfaceFactory as CustomerAddressRegionFactory;
 use Magento\Quote\Model\Quote\Address;
 use Magento\Quote\Api\Data\ShippingAssignmentInterface;
 
 class Subtotal extends CommonTaxCollector
 {
+    /**
+     * Tax module helper
+     *
+     * @var \Magento\Tax\Helper\Data
+     */
+    protected $_taxData;
+
+    /**
+     * @param \Magento\Tax\Model\Config $taxConfig
+     * @param \Magento\Tax\Api\TaxCalculationInterface $taxCalculationService
+     * @param \Magento\Tax\Api\Data\QuoteDetailsInterfaceFactory $quoteDetailsDataObjectFactory
+     * @param \Magento\Tax\Api\Data\QuoteDetailsItemInterfaceFactory $quoteDetailsItemDataObjectFactory
+     * @param \Magento\Tax\Api\Data\TaxClassKeyInterfaceFactory $taxClassKeyDataObjectFactory
+     * @param CustomerAddressFactory $customerAddressFactory
+     * @param CustomerAddressRegionFactory $customerAddressRegionFactory
+     * @param \Magento\Tax\Helper\Data $taxData
+     */
+    public function __construct(
+        \Magento\Tax\Model\Config $taxConfig,
+        \Magento\Tax\Api\TaxCalculationInterface $taxCalculationService,
+        \Magento\Tax\Api\Data\QuoteDetailsInterfaceFactory $quoteDetailsDataObjectFactory,
+        \Magento\Tax\Api\Data\QuoteDetailsItemInterfaceFactory $quoteDetailsItemDataObjectFactory,
+        \Magento\Tax\Api\Data\TaxClassKeyInterfaceFactory $taxClassKeyDataObjectFactory,
+        CustomerAddressFactory $customerAddressFactory,
+        CustomerAddressRegionFactory $customerAddressRegionFactory,
+        \Magento\Tax\Helper\Data $taxData
+    ) {
+        $this->_taxData = $taxData;
+
+        parent::__construct(
+            $taxConfig,
+            $taxCalculationService,
+            $quoteDetailsDataObjectFactory,
+            $quoteDetailsItemDataObjectFactory,
+            $taxClassKeyDataObjectFactory,
+            $customerAddressFactory,
+            $customerAddressRegionFactory
+        );
+    }
+
     /**
      * Calculate tax on product items. The result will be used to determine shipping
      * and discount later.
@@ -35,14 +77,25 @@ class Subtotal extends CommonTaxCollector
 
         $store = $quote->getStore();
         $priceIncludesTax = $this->_config->priceIncludesTax($store);
+        $useOriginalPrice = $this->_taxData->applyTaxOnOriginalPrice();
 
         //Setup taxable items
-        $itemDataObjects = $this->mapItems($shippingAssignment, $priceIncludesTax, false);
+        $itemDataObjects = $this->mapItems(
+            $shippingAssignment,
+            $priceIncludesTax,
+            false,
+            $useOriginalPrice
+        );
         $quoteDetails = $this->prepareQuoteDetails($shippingAssignment, $itemDataObjects);
         $taxDetails = $this->taxCalculationService
             ->calculateTax($quoteDetails, $store->getStoreId());
 
-        $itemDataObjects = $this->mapItems($shippingAssignment, $priceIncludesTax, true);
+        $itemDataObjects = $this->mapItems(
+            $shippingAssignment,
+            $priceIncludesTax,
+            true,
+            $useOriginalPrice
+        );
         $baseQuoteDetails = $this->prepareQuoteDetails($shippingAssignment, $itemDataObjects);
         $baseTaxDetails = $this->taxCalculationService
             ->calculateTax($baseQuoteDetails, $store->getStoreId());

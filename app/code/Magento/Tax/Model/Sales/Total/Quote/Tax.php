@@ -184,7 +184,8 @@ class Tax extends CommonTaxCollector
         $address = $shippingAssignment->getShipping()->getAddress();
         //Setup taxable items
         $priceIncludesTax = $this->_config->priceIncludesTax($address->getQuote()->getStore());
-        $itemDataObjects = $this->mapItems($shippingAssignment, $priceIncludesTax, $useBaseCurrency);
+        $useOriginalPrice = $this->_taxData->applyTaxOnOriginalPrice();
+        $itemDataObjects = $this->mapItems($shippingAssignment, $priceIncludesTax, $useBaseCurrency, $useOriginalPrice);
 
         //Add shipping
         $shippingDataObject = $this->getShippingDataObject($shippingAssignment, $total, $useBaseCurrency);
